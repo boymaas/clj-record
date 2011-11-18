@@ -72,23 +72,38 @@ instance."
       (sql/with-query-results rows select-query-and-values
         (doall (after-load model-name rows)))))
 
-(defn find-records
+(defn find-records*
   "Returns a vector of matching records.
   Given a where-params vector, uses it as-is. (See clojure.java.jdbc/with-query-results.)
   Given a map of attribute-value pairs, uses to-conditions to convert to where-params."
-  [model-name attributes-or-where-params]
+  [model-name attributes-or-where-params for-update?]
   (let [[parameterized-where & values]
           (if (map? attributes-or-where-params)
             (to-conditions attributes-or-where-params)
             attributes-or-where-params)
-          select-query (format "select * from %s where %s" (table-name model-name) parameterized-where)]
+          select-query (format "select * from %s where %s %s" (table-name model-name) parameterized-where (if for-update? "for update" ""))]
     (find-by-sql model-name (apply vector select-query values))))
+
+(defn find-records 
+  "Returns a vector of matching records.
+  Given a where-params vector, uses it as-is. (See clojure.java.jdbc/with-query-results.)
+  Given a map of attribute-value pairs, uses to-conditions to convert to where-params."
+  [model-name attributes-or-where-params]
+  (find-records model-name attributes-or-where-params false))
 
 (defn find-record
   "Returns the first matching record. This is just (first (find-records ...)).
   Note that at the moment there's no optimization to prevent the entire result set being read and converted into records."
   [model-name attributes-or-where-params]
   (first (find-records model-name attributes-or-where-params)))
+
+(defn find-records-for-update
+  [model-name attributes-or-where-params]
+  (find-records* model-name attributes-or-where-params true))
+
+(defn find-record-for-update
+  [model-name attributes-or-where-params]
+  (first (find-records* model-name attributes-or-where-params true)))
 
 (defn record-count
   "Returns the number of records that match, or the total number of records
@@ -102,11 +117,22 @@ instance."
            select-query (format "select count(*) as count from %s where %s" (table-name model-name) parameterized-where)]
        (:count (first (find-by-sql model-name (apply vector select-query values)))))))
 
+(defn get-record*
+  "Retrieves record by id, throwing if not found."
+  [model-name id for-update?]
+  (or (if for-update?
+	(find-record-for-update model-name {:id id})
+	(find-record model-name {:id id}))
+      (throw (IllegalArgumentException. "Record does not exist"))))
+
 (defn get-record
+  [model-name id]
+  (get-record* model-name id false))
+
+(defn get-record-for-update
   "Retrieves record by id, throwing if not found."
   [model-name id]
-  (or (find-record model-name {:id id})
-      (throw (IllegalArgumentException. "Record does not exist"))))
+  (get-record* model-name id true))
 
 (defn insert
   "Inserts a record populated with attributes and returns the generated id."
@@ -214,10 +240,16 @@ instance."
         ([attributes#] (record-count ~model-name attributes#)))
       (defn ~'get-record [id#]
         (get-record ~model-name id#))
+      (defn ~'get-record-for-update [id#]
+        (get-record-for-update ~model-name id#))
       (defn ~'find-records [attributes#]
         (find-records ~model-name attributes#))
       (defn ~'find-record [attributes#]
         (find-record ~model-name attributes#))
+      (defn ~'find-records-for-update [attributes#]
+        (find-records-for-update ~model-name attributes#))
+      (defn ~'find-record-for-update [attributes#]
+        (find-record-for-update ~model-name attributes#))
       (defn ~'find-by-sql [select-query-and-values#]
         (find-by-sql ~model-name select-query-and-values#))
       (defn ~'create [attributes#]
