@@ -89,13 +89,13 @@ instance."
   Given a where-params vector, uses it as-is. (See clojure.java.jdbc/with-query-results.)
   Given a map of attribute-value pairs, uses to-conditions to convert to where-params."
   [model-name attributes-or-where-params]
-  (find-records model-name attributes-or-where-params false))
+  (find-records* model-name attributes-or-where-params false))
 
 (defn find-record
   "Returns the first matching record. This is just (first (find-records ...)).
   Note that at the moment there's no optimization to prevent the entire result set being read and converted into records."
   [model-name attributes-or-where-params]
-  (first (find-records model-name attributes-or-where-params)))
+  (first (find-records* model-name attributes-or-where-params false)))
 
 (defn find-records-for-update
   [model-name attributes-or-where-params]
